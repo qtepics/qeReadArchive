@@ -1,6 +1,19 @@
 /*  rad_control.cpp
  *
- *  Copyright (c) 2013 Australian Synchrotron
+ *  Copyright (c) 2013-2019 Australian Synchrotron
+ *
+ *  The EPICS QT Framework is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Lesser General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  The EPICS QT Framework is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with the EPICS QT Framework.  If not, see <http://www.gnu.org/licenses/>.
  *
  *  Author:
  *    Andrew Starritt
@@ -8,8 +21,8 @@
  *    andrew.starritt@synchrotron.org.au
  */
 
+#include "rad_control.h"
 #include <stdlib.h>
-
 #include <iostream>
 
 #include <QDebug>
@@ -22,9 +35,8 @@
 #include <QEAdaptationParameters.h>
 #include <QESettings.h>
 
-#include "rad_control.h"
 
-#define DEBUG qDebug () << "rad_control::" << __FUNCTION__ << __LINE__
+#define DEBUG qDebug () << "rad_control" << __LINE__ << __FUNCTION__ << "  "
 
 namespace colour {
 const static char* red    = "\033[31;1m";
@@ -47,7 +59,8 @@ Rad_Control::Rad_Control () : QObject (NULL)
    this->pvIndex = 0;
 
    this->tickTimer = new QTimer (this);
-   QObject::connect (this->tickTimer, SIGNAL (timeout ()), this, SLOT (tickTimeout ()));
+   QObject::connect (this->tickTimer, SIGNAL (timeout ()),
+                     this, SLOT (tickTimeout ()));
 
    this->tickTimer->start (50);  // mSes
 }
@@ -134,7 +147,7 @@ void Rad_Control::tickTimeout ()
          break;
 
       default:
-         std::cerr << "bad state:" << this->state << "\n";
+         std::cerr << "bad state:" << this->state << std::endl;
          exit (4);
          break;
    }
@@ -143,9 +156,9 @@ void Rad_Control::tickTimeout ()
 
 //------------------------------------------------------------------------------
 //
-void Rad_Control::usage (const QString & message)
+void Rad_Control::usage (const QString& message)
 {
-   std::cerr << message.toLatin1().data() << "\n";
+   std::cerr << message.toStdString().c_str() << std::endl;
    Rad_Control::printFile (":/qe/rad/help/help_usage.txt", std::cerr);
    this->state = errorExit;
 }
@@ -181,7 +194,7 @@ QDateTime Rad_Control::value (const QString& timeImage, bool& okay)
       result = QCaDateTime::fromString (timeImage, formats [j]);
       image = result.toString (formats [0]);
 
-//      qDebug () << j << timeImage << result << image << formats [j] ;
+//    qDebug () << j << timeImage << result << image << formats [j] ;
 
       if (!image.isEmpty()) {
          okay = true;
@@ -199,7 +212,6 @@ void Rad_Control::initialise ()
    QString timeImage;
    bool okay;
    int j;
-   QString pattern;
    QString pv;
    QString line;
 
@@ -232,14 +244,18 @@ void Rad_Control::initialise ()
       //
       this->fixedTime = this->options->getFloat ("fixed", -99.0);
       if (this->fixedTime == -99.0) {
-         std::cerr << colour::red << "error: fixed time has invalid format." << colour::reset << "\n";
+         std::cerr << colour::red
+                   << "error: fixed time has invalid format."
+                   << colour::reset << std::endl;
          this->state = errorExit;
          return;
       } else {
          this->useFixedTime = true;
          if (this->fixedTime < 0.25) {
             this->fixedTime = 0.25;
-            std::cout  << colour::yellow << "warning: fixed time limited to no less than 0.25 seconds" << colour::reset << "\n";
+            std::cout << colour::yellow
+                      << "warning: fixed time limited to no less than 0.25 seconds"
+                      << colour::reset << std::endl;
          }
       }
    }
@@ -253,14 +269,14 @@ void Rad_Control::initialise ()
    timeImage = this->options->getParameter (1);
    this->startTime = this->value (timeImage, okay);
    if (!okay) {
-      this->usage ("Invalid start time format. Valid example is '31/03/2013 16:30:00'");
+      this->usage ("Invalid start time format. Valid example is '31/03/2019 16:30:00'");
       return;
    }
 
    timeImage = this->options->getParameter (2);
    this->endTime = this->value (timeImage, okay);
    if (!okay) {
-      this->usage ("Invalid end time format. Valid example is '27/04/2013 16:30:00'");
+      this->usage ("Invalid end time format. Valid example is '27/04/2019 16:30:00'");
       return;
    }
 
@@ -273,10 +289,6 @@ void Rad_Control::initialise ()
    this->pvDataList [0].pvName = pv;
    this->numberPVNames = 1;
 
-   // Make a regular expression - ensure is an exact match.
-   //
-   pattern = "^" + pv + "$";
-
    for (j = 1; j < MaximumPVNames; j++) {
       pv = this->options->getParameter (j + 3);
       if (pv.isEmpty()) {
@@ -288,7 +300,9 @@ void Rad_Control::initialise ()
          //
          this->useFixedTime = true;
          this->fixedTime = 1.0;
-         std::cout  << colour::yellow << "warning: multiple PVs - auto selecting fixed time of 1.0 s" << colour::reset << "\n";
+         std::cout  << colour::yellow
+                    << "warning: multiple PVs - auto selecting fixed time of 1.0 s"
+                    << colour::reset << std::endl;
        }
 
       this->pvDataList [j].pvName = pv;
@@ -297,41 +311,31 @@ void Rad_Control::initialise ()
       this->pvDataList [j].archiveData.clear ();
 
       this->numberPVNames = j + 1;
-
-      pattern.append("|^").append (pv).append ("$");
    }
 
    line = "start time: ";
    line.append (this->startTime.toString (stdFormat));
    line.append (" ");
    line.append (QEUtilities::getTimeZoneTLA (this->startTime));
-   std::cout << line.toLatin1().data() << "\n";
+   std::cout << line.toStdString().c_str() << std::endl;
 
    line = "end time:   ";
    line.append (this->endTime.toString (stdFormat));
    line.append (" ");
    line.append (QEUtilities::getTimeZoneTLA (this->endTime));
-   std::cout << line.toLatin1().data() << "\n";
+   std::cout << line.toStdString().c_str() << std::endl;
 
    QEAdaptationParameters ap ("QE_");
    QString archives = ap.getString ("archive_list", "");
 
    line = "archives: ";
    line.append (archives);
-   std::cout << line.toLatin1().data() << "\n";
-
-   line = "pattern:  ";
-   line.append (pattern);
-   std::cout << line.toLatin1().data() << "\n";
-
-   // We define with own pattern as opposed to default (".*") or by environment variable.
-   //
-   QEArchiveAccess::initialise (archives, pattern);
+   std::cout << line.toStdString().c_str() << std::endl;
 
    this->archiveAccess = new QEArchiveAccess ();
 
-   QObject::connect (this->archiveAccess, SIGNAL (setArchiveData (const QObject *, const bool , const QCaDataPointList &) ),
-                     this,                SLOT   (setArchiveData (const QObject *, const bool , const QCaDataPointList &)));
+   QObject::connect (this->archiveAccess, SIGNAL (setArchiveData (const QObject *, const bool, const QCaDataPointList &)),
+                     this,                SLOT   (setArchiveData (const QObject *, const bool, const QCaDataPointList &)));
 
    this->state = waitArchiverReady;
 }
@@ -341,7 +345,9 @@ void Rad_Control::initialise ()
 void Rad_Control::readArchive ()
 {
    if (this->pvIndex < 0 || this->pvIndex >= ARRAY_LENGTH (this->pvDataList)) {
-      std::cerr << colour::red << "PV index (" << this->pvIndex << ") out of range" << colour::reset << "\n";
+      std::cerr << colour::red
+                << "PV index (" << this->pvIndex << ") out of range"
+                << colour::reset << std::endl;
       exit (1);
       return;
    }
@@ -353,7 +359,7 @@ void Rad_Control::readArchive ()
 
    // Add 5% - and ensure at least 60 seconds.
    //
-   interval = this->endTime.floating (this->nextTime);
+   interval = this->nextTime.secondsTo (this->endTime);
    interval = MAX (interval * 1.05, 60.0);
 
    adjustedEndTime = this->nextTime.addSecs ((int) interval);
@@ -373,10 +379,13 @@ void Rad_Control::readArchive ()
 
 //------------------------------------------------------------------------------
 //
-void Rad_Control::setArchiveData (const QObject *, const bool okay, const QCaDataPointList &archiveDataIn)
+void Rad_Control::setArchiveData (const QObject *, const bool okay,
+                                  const QCaDataPointList& archiveDataIn)
 {
-   if (this->pvIndex < 0 || this->pvIndex >= ARRAY_LENGTH (this->pvDataList)) {
-      std::cerr << colour::red << "PV index (" << this->pvIndex << ") out of range" << colour::reset << "\n";
+   if ((this->pvIndex < 0) || (this->pvIndex >= ARRAY_LENGTH (this->pvDataList))) {
+      std::cerr << colour::red
+                << "PV index (" << this->pvIndex << ") out of range"
+                << colour::reset << std::endl;
       exit (1);
       return;
    }
@@ -443,7 +452,10 @@ void Rad_Control::setArchiveData (const QObject *, const bool okay, const QCaDat
       number = pvData->archiveData.count ();
       lastTime = pvData->archiveData.value (number - 1).datetime;
 
-      if (this->how == QEArchiveInterface::Raw && lastTime < this->endTime && lastTime > this->nextTime) {
+      if ((this->how == QEArchiveInterface::Raw) &&
+          (lastTime < this->endTime) &&
+          (lastTime > this->nextTime))
+      {
          std::cout << "requesting more data ... \n";
          this->nextTime = lastTime;
       } else {
@@ -483,7 +495,9 @@ void Rad_Control::postProcess (struct PVData* pvData)
    int number;
 
    if (!pvData) {
-      std::cerr << colour::red << "Null pvData pointer" << colour::reset << "\n";
+      std::cerr << colour::red
+                << "Null pvData pointer"
+                << colour::reset << std::endl;
       exit (1);
       return;
    }
@@ -537,7 +551,8 @@ void Rad_Control::postProcess (struct PVData* pvData)
 
 //------------------------------------------------------------------------------
 //
-void Rad_Control::putDatumSet (QTextStream& target, QCaDataPoint p [], const int j, const QCaDateTime & firstTime)
+void Rad_Control::putDatumSet (QTextStream& target, QCaDataPoint p [],
+                               const int j, const QCaDateTime& firstTime)
 {
    double relative;
    QCaDateTime time;
@@ -548,7 +563,7 @@ void Rad_Control::putDatumSet (QTextStream& target, QCaDataPoint p [], const int
 
    // Calculate the relative time from start.
    //
-   relative = p [0].datetime.floating (firstTime);
+   relative = firstTime.secondsTo(p [0].datetime);
 
    // Copy and covert to required time zone.
    //
@@ -576,7 +591,7 @@ void Rad_Control::putDatumSet (QTextStream& target, QCaDataPoint p [], const int
       }
    }
 
-   target << line  << "\n";
+   target << line << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -591,7 +606,7 @@ void Rad_Control::putArchiveData ()
    int j;
    QCaDataPoint point;
 
-   std::cout << "\nOutputing data to file: " << this->outputFile.toLatin1 ().data () << "\n";
+   std::cout << "\nOutputing data to file: " << this->outputFile.toLatin1 ().data () << std::endl;
 
    if (!target_file.open (QIODevice::WriteOnly | QIODevice::Text)) {
       std::cerr << "open file failed\n";
@@ -686,9 +701,7 @@ void Rad_Control::printFile (const QString& filename,
    QString text = textStream.readAll();
    textFile.close();
 
-   stream << text.toLatin1().data();
+   stream << text.toStdString().c_str();
 }
-
-
 
 // end
