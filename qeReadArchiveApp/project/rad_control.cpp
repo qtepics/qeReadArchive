@@ -1,6 +1,6 @@
 /*  rad_control.cpp
  *
- *  Copyright (c) 2013-2019 Australian Synchrotron
+ *  Copyright (c) 2013-2020 Australian Synchrotron
  *
  *  The EPICS QT Framework is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
@@ -52,7 +52,7 @@ Rad_Control::Rad_Control () : QObject (NULL)
 {
    this->options = new QEOptions ();
 
-   this->useTimeZone = Qt::LocalTime;
+   this->timeZoneSpec = Qt::LocalTime;
    this->state = setup;
    this->timeout = 0;
    this->numberPVNames = 0;
@@ -83,12 +83,25 @@ void Rad_Control::setTimeout (const double delay)
 }
 
 //------------------------------------------------------------------------------
+//
+QDateTime Rad_Control::toRadTime (const QDateTime dateTime) const
+{
+   QDateTime result;
+   if (this->timeZoneSpec == Qt::UTC) {
+      result = dateTime.toUTC();
+   } else {
+      result = dateTime.toLocalTime();
+   }
+   return result;
+}
+
+//------------------------------------------------------------------------------
 // A sort of state machine.
 //
 void Rad_Control::tickTimeout ()
 {
 
-//   qDebug () << this->state << this->timeout;
+   //   qDebug () << this->state << this->timeout;
    switch (this->state) {
 
       case setup:
@@ -194,14 +207,14 @@ QDateTime Rad_Control::value (const QString& timeImage, bool& okay)
       result = QCaDateTime::fromString (timeImage, formats [j]);
       image = result.toString (formats [0]);
 
-//    qDebug () << j << timeImage << result << image << formats [j] ;
+      //    qDebug () << j << timeImage << result << image << formats [j] ;
 
       if (!image.isEmpty()) {
          okay = true;
          break;
       }
    }
-   result.setTimeSpec (this->useTimeZone);
+   result.setTimeSpec (this->timeZoneSpec);
    return result;
 }
 
@@ -226,9 +239,9 @@ void Rad_Control::initialise ()
    }
 
    if (this->options->getBool ("utc")) {
-      this->useTimeZone = Qt::UTC;
+      this->timeZoneSpec = Qt::UTC;
    } else {
-      this->useTimeZone = Qt::LocalTime;
+      this->timeZoneSpec = Qt::LocalTime;
    }
 
    if (this->options->getBool ("raw")) {
@@ -269,14 +282,14 @@ void Rad_Control::initialise ()
    timeImage = this->options->getParameter (1);
    this->startTime = this->value (timeImage, okay);
    if (!okay) {
-      this->usage ("Invalid start time format. Valid example is '31/03/2019 16:30:00'");
+      this->usage ("Invalid start time format. Valid example is \"16/06/2020 16:30:00\"");
       return;
    }
 
    timeImage = this->options->getParameter (2);
    this->endTime = this->value (timeImage, okay);
    if (!okay) {
-      this->usage ("Invalid end time format. Valid example is '27/04/2019 16:30:00'");
+      this->usage ("Invalid end time format. Valid example is \"17/06/2020 16:30:00\"");
       return;
    }
 
@@ -303,7 +316,7 @@ void Rad_Control::initialise ()
          std::cout  << colour::yellow
                     << "warning: multiple PVs - auto selecting fixed time of 1.0 s"
                     << colour::reset << std::endl;
-       }
+      }
 
       this->pvDataList [j].pvName = pv;
       this->pvDataList [j].isOkayStatus = false;
@@ -364,22 +377,27 @@ void Rad_Control::readArchive ()
 
    adjustedEndTime = this->nextTime.addSecs ((int) interval);
 
+   // The archivers work in UTC
+   // Maybe readArchive should be modified to do this based on the
+   // time zone in the start/finish times.
+   //
+   QDateTime t0 = this->nextTime.toUTC();
+   QDateTime t1 = adjustedEndTime.toUTC();
 
-   this->archiveAccess->readArchive (this, pvName,
-                                     this->nextTime, adjustedEndTime,
-                                     20000,
-                                     this->how, 0);
+   this->archiveAccess->readArchive (this, pvName, t0, t1,
+                                     20000, this->how, 0);
 
    std::cout << "\nArchiver request issued:    "
              << pvName.toLatin1 ().data ()
              << " ("<< this->nextTime.toString(stdFormat).toLatin1 ().data ()
              << " to " << adjustedEndTime.toString(stdFormat).toLatin1 ().data ()
+             << " " << QEUtilities::getTimeZoneTLA (adjustedEndTime).toLatin1 ().data ()
              << ")\n";
 }
 
 //------------------------------------------------------------------------------
 //
-void Rad_Control::setArchiveData (const QObject *, const bool okay,
+void Rad_Control::setArchiveData (const QObject*, const bool okay,
                                   const QCaDataPointList& archiveDataIn)
 {
    if ((this->pvIndex < 0) || (this->pvIndex >= ARRAY_LENGTH (this->pvDataList))) {
@@ -393,11 +411,10 @@ void Rad_Control::setArchiveData (const QObject *, const bool okay,
    struct PVData* pvData = &this->pvDataList [this->pvIndex];
    QString pvName = pvData->pvName;
    QString line;
-   int number;
    QCaDateTime firstTime;
    QCaDateTime lastTime;
 
-   number = archiveDataIn.count ();
+   int number = archiveDataIn.count ();
 
    line = "Archiver response received: ";
    line.append (pvName);
@@ -406,18 +423,29 @@ void Rad_Control::setArchiveData (const QObject *, const bool okay,
    line.append (", number of points: ");
    line.append (QString ("%1").arg (number));
 
-   if (number > 0) {
-       firstTime = archiveDataIn.value (0).datetime;
-       lastTime = archiveDataIn.value (number - 1).datetime;
-
-       line.append (" (");
-       line.append (firstTime.toString (stdFormat));
-       line.append (" to ");
-       line.append (lastTime.toString (stdFormat));
-       line.append (" ");
-       line.append (QEUtilities::getTimeZoneTLA (lastTime));
-       line.append (")");
+   // We need a working copy - archiveDataIn is const.
+   // Also need to adjust time zone
+   //
+   QCaDataPointList working;
+   for (int j = 0; j < number; j++) {
+      QCaDataPoint item = archiveDataIn.value (j);
+      item.datetime = this->toRadTime (item.datetime);
+      working.append (item);
    }
+
+   if (number > 0) {
+      firstTime = working.value (0).datetime;
+      lastTime =  working.value (number - 1).datetime;
+
+      line.append (" (");
+      line.append (firstTime.toString (stdFormat));
+      line.append (" to ");
+      line.append (lastTime.toString (stdFormat));
+      line.append (" ");
+      line.append (QEUtilities::getTimeZoneTLA (lastTime));
+      line.append (")");
+   }
+
    line.append ("\n");
    std::cout << line.toLatin1 ().data ();
 
@@ -430,16 +458,12 @@ void Rad_Control::setArchiveData (const QObject *, const bool okay,
       if (pvData->responseCount == 1) {
          // First update - just copy
          //
-         pvData->archiveData = archiveDataIn;
+         pvData->archiveData = working;
       } else {
          // Subsequent update.
          //
          number = pvData->archiveData.count ();
          lastTime = pvData->archiveData.value (number - 1).datetime;
-
-         // We need a working copy - archiveDataIn is const.
-         //
-         QCaDataPointList working = archiveDataIn;
 
          // Remove any overlap times.
          //
@@ -571,7 +595,7 @@ void Rad_Control::putDatumSet (QTextStream& target, QCaDataPoint p [],
 
    // Now set to the required time zone.
    //
-   time = time.toTimeSpec (this->useTimeZone);
+   time = time.toTimeSpec (this->timeZoneSpec);
 
    zone = QEUtilities::getTimeZoneTLA (time);
 

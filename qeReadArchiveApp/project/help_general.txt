@@ -18,10 +18,10 @@ Parameters
 output_file   The file where the output is to be written.
 
 start_time    Time for first point to be read from the archiver
-              Example: '26/05/2013 00:57:39'
+              Example: "26/05/2020 00:57:39"
 
 end_time      Time for last point to be read from the archiver
-              Example: '26/05/2013 12:57:39'
+              Example: "26/05/2020 12:57:39"
 
 pv_names      The names of the PV to be retrieved from the archiver.
               There must be at least one. Note: case is significant.
