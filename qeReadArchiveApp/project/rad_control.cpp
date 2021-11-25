@@ -1,6 +1,6 @@
 /*  rad_control.cpp
  *
- *  Copyright (c) 2013-2020 Australian Synchrotron
+ *  Copyright (c) 2013-2021 Australian Synchrotron
  *
  *  The EPICS QT Framework is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
@@ -27,6 +27,7 @@
 
 #include <QDebug>
 #include <QDateTime>
+#include <QFile>
 
 #include <QECommon.h>
 #include <QEArchiveInterface.h>
