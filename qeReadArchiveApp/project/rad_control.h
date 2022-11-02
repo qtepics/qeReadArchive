@@ -3,7 +3,7 @@
  * This file is part of the EPICS QT Framework, initially developed at the
  * Australian Synchrotron.
  *
- * Copyright (c) 2013-2020 Australian Synchrotron
+ * Copyright (c) 2013-2022 Australian Synchrotron
  *
  * The EPICS QT Framework is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -21,7 +21,7 @@
  * Author:
  *    Andrew Starritt
  * Contact details:
- *    andrew.starritt@synchrotron.org.au
+ *    andrews@ansto.gov.au
  */
 
 #ifndef RAD_CONTROL_H
@@ -56,6 +56,7 @@ private:
    // The rad program is managaed as a simple state machine.
    //
    enum States { setup,
+                 initialWait,
                  waitArchiverReady,
                  initialiseRequest,
                  sendRequest,
@@ -109,7 +110,8 @@ private slots:
 
    void tickTimeout ();
    void setArchiveData (const QObject* userData, const bool okay,
-                        const QCaDataPointList& archiveData);
+                        const QCaDataPointList& archiveData,
+                        const QString& pvName, const QString& supplementary);
 
 };
 

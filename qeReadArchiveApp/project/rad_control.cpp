@@ -1,6 +1,6 @@
 /*  rad_control.cpp
  *
- *  Copyright (c) 2013-2021 Australian Synchrotron
+ *  Copyright (c) 2013-2022 Australian Synchrotron
  *
  *  The EPICS QT Framework is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
@@ -18,7 +18,7 @@
  *  Author:
  *    Andrew Starritt
  *  Contact details:
- *    andrew.starritt@synchrotron.org.au
+ *    andrews@ansto.gov.au
  */
 
 #include "rad_control.h"
@@ -54,7 +54,7 @@ Rad_Control::Rad_Control () : QObject (NULL)
    this->options = new QEOptions ();
 
    this->timeZoneSpec = Qt::LocalTime;
-   this->state = setup;
+   this->state = setup;   // state machine state
    this->timeout = 0;
    this->numberPVNames = 0;
    this->pvIndex = 0;
@@ -63,7 +63,7 @@ Rad_Control::Rad_Control () : QObject (NULL)
    QObject::connect (this->tickTimer, SIGNAL (timeout ()),
                      this, SLOT (tickTimeout ()));
 
-   this->tickTimer->start (50);  // mSes
+   this->tickTimer->start (100);  // mSes
 }
 
 //------------------------------------------------------------------------------
@@ -77,7 +77,7 @@ Rad_Control::~Rad_Control ()
 //
 void Rad_Control::setTimeout (const double delay)
 {
-   double n = this->tickTimer->interval ();
+   double n = this->tickTimer->interval ();    // 100 mS
 
    this->timeout = (int) ((1000.0 * delay + (n - 1.0)) / n);
    if (this->timeout < 1) this->timeout = 1;
@@ -101,24 +101,35 @@ QDateTime Rad_Control::toRadTime (const QDateTime dateTime) const
 //
 void Rad_Control::tickTimeout ()
 {
-
-   //   qDebug () << this->state << this->timeout;
    switch (this->state) {
 
       case setup:
          this->initialise ();
-         this->setTimeout (30.0);
+         this->setTimeout (20.0);
+         break;
+
+      case initialWait:
+         // Just wait 20 ....
+         this->timeout--;
+         if (this->timeout % 10 == 0) std::cerr << '.';
+         if (this->timeout <= 0) {
+            std::cerr << '.' << std::endl;
+            this->setTimeout (60.0);
+            this->state = waitArchiverReady;
+         }
          break;
 
       case waitArchiverReady:
          if (this->archiveAccess->isReady ()) {
-            std::cout << "Archiver interface initialised\n";
+            std::cout << "Archiver interface initialised" << std::endl;
             this->state = initialiseRequest;
          } else {
             this->timeout--;
             if (this->timeout <= 0) {
-               std::cerr << "Archiver interface initialise timeout\n";
+               std::cerr << "Archiver interface initialise timeout" << std::endl;
                exit (1);
+            } else if ((this->timeout == 20) || (this->timeout == 40)) {
+               std::cerr << "Still awating archiver interface initialisation" << std::endl;
             }
          }
          break;
@@ -134,14 +145,16 @@ void Rad_Control::tickTimeout ()
       case sendRequest:
          this->readArchive ();
          this->state = waitResponse;
-         this->setTimeout (20.0);
+         this->setTimeout (60.0);
          break;
 
       case waitResponse:
          this->timeout--;
          if (this->timeout <= 0) {
-            std::cerr << "archive read timeout\n";
+            std::cerr << "archive read timeout" << std::endl;
             exit (1);
+         } else if ((this->timeout == 20) || (this->timeout == 40)) {
+            std::cerr << "Still awating archiver response" << std::endl;
          }
          break;
 
@@ -151,12 +164,12 @@ void Rad_Control::tickTimeout ()
          break;
 
       case allDone:
-         std::cout << "qerad complete\n";
+         std::cout << "qerad complete" << std::endl;
          exit (0);
          break;
 
       case errorExit:
-         std::cout << "qerad terminated\n";
+         std::cout << "qerad terminated" << std::endl;
          exit (1);
          break;
 
@@ -348,10 +361,14 @@ void Rad_Control::initialise ()
 
    this->archiveAccess = new QEArchiveAccess ();
 
-   QObject::connect (this->archiveAccess, SIGNAL (setArchiveData (const QObject *, const bool, const QCaDataPointList &)),
-                     this,                SLOT   (setArchiveData (const QObject *, const bool, const QCaDataPointList &)));
+   // Set up connection to archive access mamanger.
+   //
+   QObject::connect (this->archiveAccess, SIGNAL (setArchiveData (const QObject*, const bool, const QCaDataPointList&,
+                                                                  const QString&, const QString&)),
+                     this,                SLOT   (setArchiveData (const QObject*, const bool, const QCaDataPointList&,
+                                                                  const QString&, const QString&)));
 
-   this->state = waitArchiverReady;
+   this->state = initialWait;    // First proper state
 }
 
 //------------------------------------------------------------------------------
@@ -393,13 +410,14 @@ void Rad_Control::readArchive ()
              << " ("<< this->nextTime.toString(stdFormat).toLatin1 ().data ()
              << " to " << adjustedEndTime.toString(stdFormat).toLatin1 ().data ()
              << " " << QEUtilities::getTimeZoneTLA (adjustedEndTime).toLatin1 ().data ()
-             << ")\n";
+             << ")" << std::endl;
 }
 
 //------------------------------------------------------------------------------
 //
 void Rad_Control::setArchiveData (const QObject*, const bool okay,
-                                  const QCaDataPointList& archiveDataIn)
+                                  const QCaDataPointList& archiveDataIn,
+                                  const QString&, const QString& supplementary)
 {
    if ((this->pvIndex < 0) || (this->pvIndex >= ARRAY_LENGTH (this->pvDataList))) {
       std::cerr << colour::red
@@ -423,6 +441,8 @@ void Rad_Control::setArchiveData (const QObject*, const bool okay,
    line.append (okay ? "okay" : "failed");
    line.append (", number of points: ");
    line.append (QString ("%1").arg (number));
+   line.append ("\n");
+   line.append (supplementary);
 
    // We need a working copy - archiveDataIn is const.
    // Also need to adjust time zone
@@ -481,7 +501,7 @@ void Rad_Control::setArchiveData (const QObject*, const bool okay,
           (lastTime < this->endTime) &&
           (lastTime > this->nextTime))
       {
-         std::cout << "requesting more data ... \n";
+         std::cout << "requesting more data ... " << std::endl;
          this->nextTime = lastTime;
       } else {
 
@@ -556,7 +576,7 @@ void Rad_Control::postProcess (struct PVData* pvData)
       }
 
       number = pvData->archiveData.count ();
-      std::cout << " resampled to " << number << " points.\n";
+      std::cout << " resampled to " << number << " points." << std::endl;
 
    } else {
       // Remove points beyond endTime
@@ -572,7 +592,6 @@ void Rad_Control::postProcess (struct PVData* pvData)
       }
    }
 }
-
 
 //------------------------------------------------------------------------------
 //
@@ -634,7 +653,7 @@ void Rad_Control::putArchiveData ()
    std::cout << "\nOutputing data to file: " << this->outputFile.toLatin1 ().data () << std::endl;
 
    if (!target_file.open (QIODevice::WriteOnly | QIODevice::Text)) {
-      std::cerr << "open file failed\n";
+      std::cerr << "open file failed" << std::endl;
       this->state = errorExit;
       return;
    }
