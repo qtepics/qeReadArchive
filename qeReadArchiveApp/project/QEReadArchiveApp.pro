@@ -1,12 +1,12 @@
 # $File: //ASP/tec/gui/qeReadArchive/trunk/qeReadArchiveApp/project/QEReadArchiveApp.pro $
-# $Revision: #4 $
-# $DateTime: 2020/06/12 16:24:37 $
+# $Revision: #5 $
+# $DateTime: 2024/08/15 11:32:45 $
 # Last checked in by: $Author: starritt $
 #
 # This file is part of the EPICS QT Framework, initially developed at the
 # Australian Synchrotron.
 #
-# Copyright (c) 2012-2020  Australian Synchrotron
+# Copyright (c) 2012-2024  Australian Synchrotron
 #
 # The EPICS QT Framework is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
@@ -31,7 +31,7 @@
 #
 TOP=../..
 
-message ("QT_MAJOR_VERSION = " $$QT_MAJOR_VERSION )
+message ("QT_VERSION = "$$QT_MAJOR_VERSION"."$$QT_MINOR_VERSION"."$$QT_PATCH_VERSION )
 
 QT -= gui
 QT += xml network
