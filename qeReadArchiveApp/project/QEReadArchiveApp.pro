@@ -1,7 +1,6 @@
-# $File: //ASP/tec/gui/qeReadArchive/trunk/qeReadArchiveApp/project/QEReadArchiveApp.pro $
-# $Revision: #5 $
-# $DateTime: 2024/08/15 11:32:45 $
-# Last checked in by: $Author: starritt $
+# File: qeReadArchiveApp/project/QEReadArchiveApp.pro
+# DateTime: Mon May 26 17:13:05 2025
+# Last checked in by: starritt
 #
 # This file is part of the EPICS QT Framework, initially developed at the
 # Australian Synchrotron.

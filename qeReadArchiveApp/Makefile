@@ -1,7 +1,6 @@
-# $File: //ASP/tec/gui/qeReadArchive/trunk/qeReadArchiveApp/Makefile $
-# $Revision: #3 $
-# $DateTime: 2017/05/03 18:48:46 $
-# Last checked in by: $Author: starritt $
+# File: qeReadArchiveApp/Makefile
+# DateTime: Mon May 26 17:13:05 2025
+# Last checked in by: starritt
 #
 # This make file is the bridge beween the EPICS build system and the Qt project qmake/make paradigm.
 #
